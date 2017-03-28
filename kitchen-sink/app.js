@@ -1,3 +1,11 @@
+function getLang()
+{
+ if (navigator.languages != undefined)
+ 	return navigator.languages[0];
+ else
+ 	return navigator.language;
+}
+
 phonon.options({
 
 	navigator: {
@@ -10,7 +18,7 @@ phonon.options({
 	i18n: {
 		directory: 'lang/',
 		localeFallback: 'en',
-		localePreferred: 'en-US'
+		localePreferred: getLang()
 	}
 });
 
@@ -61,6 +69,7 @@ app.on({page: 'pagegrid', content: 'pagegrid.html'});
 
 app.on({page: 'pagelist', content: 'pagelist.html'});
 app.on({page: 'pageaccordion', content: 'pageaccordion.html'});
+app.on({page: 'pageautocomplete', content: 'pageautocomplete.html'});
 
 app.on({page: 'pagenotif', content: 'pagenotif.html', readyDelay: 500}, function(activity) {
 

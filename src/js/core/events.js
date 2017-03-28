@@ -1,4 +1,4 @@
-phonon.event = (function () {
+phonon.event = (function ($) {
 
     /**
      * Events
@@ -7,15 +7,15 @@ phonon.event = (function () {
      * [3] transitionEnd and animationEnd polyfill
      */
 
-	// Use available events
-	// mousecancel does not exists
+    // Use available events
+    // mousecancel does not exists
     var availableEvents = ['mousedown', 'mousemove', 'mouseup'];
 
     // Check if touch is enabled
     var hasTouch = false;
     if(('ontouchstart' in window) || window.DocumentTouch && document instanceof DocumentTouch) {
         hasTouch = true;
-		availableEvents = ['touchstart', 'touchmove', 'touchend', 'touchcancel'];
+        availableEvents = ['touchstart', 'touchmove', 'touchend', 'touchcancel'];
     }
 
     if (window.navigator.pointerEnabled) {
@@ -31,9 +31,15 @@ phonon.event = (function () {
     api.start = availableEvents[0];
     api.move = availableEvents[1];
     api.end = availableEvents[2];
-	api.cancel = typeof availableEvents[3] === 'undefined' ? null : availableEvents[3];
+    api.cancel = typeof availableEvents[3] === 'undefined' ? null : availableEvents[3];
 
     api.tap = 'tap';
+
+	/**
+	 * By default, force click event if the browser does
+	 * not support touch events
+	 */
+	api.forceTap = false
 
     /**
      * Animation/Transition event polyfill
@@ -73,11 +79,11 @@ phonon.event = (function () {
 
     // fix bug on Android 4.1
     var osV = phonon.device.osVersion;
-    if(osV.length > 2) {
+    if(osV && osV.length > 2) {
         osV = phonon.device.osVersion.substring(0,3);
     }
 
-    if(phonon.device.os.toLowerCase() === 'android' && osV === '4.1') {
+    if(phonon.device.os && phonon.device.os.toLowerCase() === 'android' && osV === '4.1') {
         transitionEnd = 'webkitTransitionEnd';
         animationEnd = 'webkitAnimationEnd';
     }
@@ -112,7 +118,7 @@ phonon.event = (function () {
 
         TapElement.prototype.move = function(e) {
 
-			var moveX = (e.touches ? e.touches[0].clientX : e.clientX);
+            var moveX = (e.touches ? e.touches[0].clientX : e.clientX);
             var moveY = (e.touches ? e.touches[0].clientY : e.clientY);
 
             //if finger moves more than 10px flag to cancel
@@ -123,12 +129,31 @@ phonon.event = (function () {
 
         TapElement.prototype.end = function(e) {
 
-			this.el.removeEventListener(api.move, this, false);
+            this.el.removeEventListener(api.move, this, false);
             this.el.removeEventListener(api.end, this, false);
 
-			if (api.cancel !== null) this.el.removeEventListener(api.cancel, this, false);
+            if (api.cancel !== null) this.el.removeEventListener(api.cancel, this, false);
 
             if (!this.moved) {
+                /**
+                 * jQuery/Zepto compatibility with the tap event
+                 * See issue: #147
+                 */
+                if (typeof $ !== 'undefined') {
+                    var customEvent = new window.CustomEvent(
+                        this.tap,
+                        {
+                            detail: {
+                                event: 'tap',
+                                target: this.element
+                            },
+                            bubbles: true,
+                            cancelable: true
+                        }
+                    );
+                    this.el.dispatchEvent(customEvent);
+                }
+
                 this.callback(e);
             }
         };
@@ -143,7 +168,7 @@ phonon.event = (function () {
             this.el.removeEventListener(api.start, this, false);
             this.el.removeEventListener(api.move, this, false);
             this.el.removeEventListener(api.end, this, false);
-			if(api.cancel !== null) this.el.removeEventListener(api.cancel, this, false);
+            if(api.cancel !== null) this.el.removeEventListener(api.cancel, this, false);
         };
 
         TapElement.prototype.handleEvent = function(e) {
@@ -159,49 +184,82 @@ phonon.event = (function () {
     })();
 
     phonon.on = function(el, eventName, callback, useCapture) {
+        var addEvent = function(el, eventName, callback, useCapture) {
+            if(eventName === api.tap && (api.hasTouch || api.forceTap)) {
+                var tap = new TapElement(el, callback);
+                tapEls.push(tap);
+                return;
+            }
 
-        if(eventName === api.tap) {
-            var tap = new TapElement(el, callback);
-            tapEls.push(tap);
-            return;
-        }
+            if(eventName === api.tap) {
+                eventName = 'click';
+            }
 
-        if(el.addEventListener) {
-            el.addEventListener(eventName, callback, useCapture);
-        } else if(el.attachEvent) {
-            el.attachEvent('on' + eventName, callback, useCapture);
+            if(el.addEventListener) {
+                el.addEventListener(eventName, callback, useCapture);
+            } else if(el.attachEvent) {
+                el.attachEvent('on' + eventName, callback, useCapture);
+            }
+        };
+
+        if(typeof el.length !== 'undefined') {
+            var i = 0;
+            var l = el.length;
+            for (; i < l; i++) {
+                addEvent(el[i], eventName, callback, useCapture)
+            }
+            return
         }
+        addEvent(el, eventName, callback, useCapture)
     };
 
-    window.on = document.on = HTMLElement.prototype.on = function(type, listener, useCapture) {
+    window.on = document.on = NodeList.prototype.on = HTMLElement.prototype.on = function(type, listener, useCapture) {
         phonon.on(this, type, listener, useCapture);
     };
 
     phonon.off = function(el, eventName, callback, useCapture) {
 
-        if(eventName === api.tap) {
-
-            for (var i = tapEls.length - 1; i >= 0; i--) {
-                if(tapEls[i].el === el) {
-                    tapEls[i].off();
-                    tapEls.splice(i, 1);
-                    break;
+        var removeEvent = function (el, eventName, callback, useCapture) {
+            if(eventName === api.tap && (api.hasTouch || api.forceTap)) {
+                var i = 0;
+                var l = tapEls.length;
+                for (; i < l; i++) {
+                    if(tapEls[i].el === el) {
+                        tapEls[i].off();
+                        tapEls.splice(i, 1);
+                        break;
+                    }
                 }
+                return;
             }
-            return;
+
+			if(eventName === api.tap) {
+                eventName = 'click';
+            }
+
+            if(el.removeEventListener) {
+                el.removeEventListener(eventName, callback, useCapture);
+            } else if(el.attachEvent) {
+                el.detachEvent('on' + eventName, callback, useCapture);
+            }
+        };
+
+        if(typeof el.length !== 'undefined') {
+            var i = 0;
+            var l = el.length;
+            for (; i < l; i++) {
+                removeEvent(el[i], eventName, callback, useCapture)
+            }
+            return
         }
 
-        if(el.removeEventListener) {
-            el.removeEventListener(eventName, callback, useCapture);
-        } else if(el.attachEvent) {
-            el.detachEvent('on' + eventName, callback, useCapture);
-        }
+        removeEvent(el, eventName, callback, useCapture)
     };
 
-    window.off = document.off = HTMLElement.prototype.off = function(type, listener, useCapture) {
+    window.off = document.off = NodeList.prototype.off = HTMLElement.prototype.off = function(type, listener, useCapture) {
         phonon.off(this, type, listener, useCapture);
     };
 
     return api;
 
-})();
+})(window.jQuery);

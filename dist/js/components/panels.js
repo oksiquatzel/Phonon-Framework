@@ -66,13 +66,14 @@
 	}
 
 	/**
-	* Used to find an opened dialog
+	* Used to find an opened dialog or an opened popover
 	* in front of a panel
 	* @todo clean this
 	*/
 	var onDialog = function (target) {
 		for (; target && target !== document; target = target.parentNode) {
-			if (target.classList.contains('dialog') || target.classList.contains('backdrop-dialog')) {
+			if (target.classList.contains('dialog') || target.classList.contains('backdrop-dialog') ||
+			target.classList.contains('popover') || target.classList.contains('backdrop-popover')) {
 				return true;
 			}
 		}
@@ -131,7 +132,6 @@
 	});
 
 	function onHide() {
-
 		document.body.removeChild(this);
 
 		var object = findObject(this.getAttribute('data-backdrop-for'))
@@ -146,10 +146,13 @@
 	*/
 
 	function open (panel) {
-		panel.style.visibility = 'visible';
-
 		if(!panel.classList.contains('active')) {
-			panel.classList.add('active');
+			panel.style.display = 'block';
+
+			window.setTimeout(function () {
+				panel.classList.add('active');
+			}, 10);
+
 			var backdrop = createBackdrop(panel.getAttribute('id'));
 
 			document.body.appendChild(backdrop);
@@ -159,14 +162,13 @@
 	}
 
 	function close (panel) {
-
 		if(panel.classList.contains('active')) {
-
 			panel.classList.remove('active');
 			panel.classList.add('panel-closing');
 
 			var closePanel = function () {
 				panel.classList.remove('panel-closing');
+				panel.style.display = 'none';
 				panel.off(phonon.event.transitionEnd, closePanel);
 			};
 
@@ -182,19 +184,15 @@
 		}
 	}
 
-	phonon.panel = function (el) {
-		if(typeof el === 'undefined') {
-			return {
-				closeActive: function() {
-					var closable = (_activeObjects.length > 0 ? true : false);
-					if(closable) {
-						close(_activeObjects[_activeObjects.length - 1].panel);
-					}
-					return closable;
-				}
-			}
+	function closeActive() {
+		var closable = (_activeObjects.length > 0 ? true : false);
+		if(closable) {
+			close(_activeObjects[_activeObjects.length - 1].panel);
 		}
+		return closable;
+	}
 
+	phonon.panel = function (el) {
 		var panel = (typeof el === 'string' ? document.querySelector(el) : el);
 		if(panel === null) {
 			throw new Error('The panel with ID ' + el + ' does not exist');
@@ -208,6 +206,10 @@
 				close(panel);
 			}
 		};
+	};
+
+	phonon.panelUtil = {
+		closeActive: closeActive
 	};
 
 	window.phonon = phonon;

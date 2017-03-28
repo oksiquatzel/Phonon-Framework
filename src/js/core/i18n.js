@@ -4,7 +4,6 @@
  * ========================================================================
  * Licensed under MIT (http://phonon.quarkdev.com)
  * ======================================================================== */
-
 ;(function (window, document) {
 
     var jsonCache = null;
@@ -39,7 +38,7 @@
             el.textContent = text;
         }
     };
-    
+
     /**
     * Binds some html to the given DOM element
     * @param {DOMObject} el
@@ -71,7 +70,7 @@
     };
 
     /**
-     * Reads data-i18n attributes and set JSON values 
+     * Reads data-i18n attributes and set JSON values
      * @param {Array} elements
      * @param {JSON} json
      * @private
@@ -148,6 +147,17 @@
             throw new Error('callback must be a function');
         }
 
+        var locale = opts.localePreferred ? opts.localePreferred : opts.localeFallback;
+
+        if (typeof langCache != 'undefined') {
+          // FIX iOS. User provides a langCache Array
+          if (!(locale in langCache)) {
+              console.log('The language [' + locale + '] is not available, loading ' + opts.localeFallback);
+              locale = opts.localeFallback;
+          }
+          jsonCache = langCache[locale];
+        }
+
         if(jsonCache !== null) {
             callback(jsonCache);
             return;
@@ -155,34 +165,27 @@
 
         var xhr = new XMLHttpRequest();
 
-        var locale = opts.localePreferred ? opts.localePreferred : opts.localeFallback;
-
         xhr.open('GET', opts.directory + locale + '.json', true);
         if(xhr.overrideMimeType) xhr.overrideMimeType('application/json; charset=utf-8');
 
         xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                if (xhr.status === 200) {
+            if(xhr.readyState === 4 && (xhr.status === 200 || !xhr.status && xhr.responseText.length)) {
+                jsonCache = JSON.parse(xhr.responseText);
+                callback(JSON.parse(xhr.responseText));
+            } else if(xhr.readyState === 4 && !(xhr.status === 200 || !xhr.status && xhr.responseText.length)) {
+                if(opts.localePreferred) {
 
-                    jsonCache = JSON.parse(xhr.responseText);
-                    callback(JSON.parse(xhr.responseText));
+                    // The preferred locale is not available
+                    opts.localePreferred = null;
 
+                    console.log('The language [' + locale + '] is not available, loading ' + opts.localeFallback);
+
+                    getAll(function (json) {
+                        jsonCache = json;
+                        callback(json);
+                    });
                 } else {
-
-                    if(opts.localePreferred) {
-
-                        // The preferred locale is not available
-                        opts.localePreferred = null;
-
-                        console.log('The language [' + locale + '] is not available, loading ' + opts.localeFallback);
-
-                        getAll(function (json) {
-                            jsonCache = json;
-                            callback(json);
-                        });
-                    } else {
-                        throw new Error('The default locale ['+opts.directory+opts.localeFallback+'.json] file is not found');
-                    }
+                    throw new Error('The default locale ['+opts.directory+opts.localeFallback+'.json] file is not found');
                 }
             }
         };

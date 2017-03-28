@@ -1,6 +1,5 @@
 	// init
 	phonon.options = function(options) {
-
 		var useI18n = false;
 		if(typeof options.i18n === 'object' && options.i18n !== null) {
 			phonon.i18n(options.i18n);
@@ -24,6 +23,10 @@
 
 	phonon.prompt = function(text, title, cancelable, textOk, textCancel) {
 		return phonon.dialog().prompt(text, title, cancelable, textOk, textCancel);
+	};
+
+	phonon.passPrompt = function(text, title, cancelable, textOk, textCancel) {
+		return phonon.dialog().passPrompt(text, title, cancelable, textOk, textCancel);
 	};
 
 	phonon.indicator = function(title, cancelable) {

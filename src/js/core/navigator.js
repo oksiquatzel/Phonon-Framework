@@ -8,6 +8,8 @@
 
   'use strict';
 
+  window.phononDOM = {}
+
   var pages = [];
   var pageHistory = [];
   var started = false;
@@ -23,6 +25,7 @@
 
   var opts = {
     defaultPage: null,
+    defaultTemplateExtension: null,
     hashPrefix: '!',
     animatePages: true,
     templateRootDirectory: '',
@@ -130,12 +133,20 @@
     return null;
   };
 
-  function DOMEval(code) {
+  function DOMEval(pageName, code) {
+      // create page in window object
+      if(typeof window.phononDOM[pageName] === 'undefined') {
+        window.phononDOM[pageName] = {}
+      }
 
+      // add a js variable as shortcut
+      var fullCode = 'var page = window.phononDOM["' + pageName + '"];';
+      fullCode += code;
+
+      // execute script
 	  var script = document.createElement('script');
-
-	  script.text = code;
-	  document.head.appendChild( script ).parentNode.removeChild( script );
+	  script.text = fullCode;
+	  document.head.appendChild(script).parentNode.removeChild(script);
   }
 
   /**
@@ -192,7 +203,7 @@
     onActiveTransition = false;
   }
 
-  function dispatchEvent(eventName, pageName, parameters) {
+  function dispatchDOMEvent(eventName, pageName, parameters) {
 
 	  var eventInitDict = {
           detail: { page: pageName },
@@ -209,6 +220,26 @@
 	  document.dispatchEvent(event);
   }
 
+  /**
+   * Dispatches page event from addEvent API
+   *
+   * @param {String} eventName
+   * @param {Array} eventHandlers
+   * @param {Object} data
+   */
+  function dispatchEvent(eventName, eventHandlers, data) {
+      var i = 0;
+      var l = eventHandlers.length;
+      for (; i < l; i++) {
+          var eventHandler = eventHandlers[i]
+          if (eventHandler.event === eventName) {
+              if (typeof eventHandler.callback === 'function') {
+                  eventHandler.callback(data)
+              }
+          }
+      }
+  }
+
   function callCreate(pageName) {
 
     if(riotEnabled) {
@@ -221,7 +252,7 @@
      * so that UI components are ready to use
      * issue #52 is related to this
     */
-	dispatchEvent('pagecreated', pageName)
+	dispatchDOMEvent('pagecreated', pageName)
 
 	var page = getPageObject(pageName);
 
@@ -230,6 +261,14 @@
       page.activity.onCreateCallback();
     }
 
+    dispatchEvent('create', page.callbackRegistered);
+
+    if(typeof window.phononDOM[page.name] === 'object') {
+        var fn = window.phononDOM[page.name]['onCreate'];
+        if(typeof fn === 'function') {
+            fn()
+        }
+    }
   }
 
   function callReady(pageName) {
@@ -244,11 +283,20 @@
       }
 
       // Dispatch the global event pageopened
-	  dispatchEvent('pageopened', pageName)
+	  dispatchDOMEvent('pageopened', pageName)
 
       // Call the onReady callback
       if(page.activity instanceof Activity && typeof page.activity.onReadyCallback === 'function') {
         page.activity.onReadyCallback();
+      }
+
+      dispatchEvent('ready', page.callbackRegistered)
+
+      if(typeof window.phononDOM[page.name] === 'object') {
+          var fn = window.phononDOM[page.name]['onReady'];
+          if(typeof fn === 'function') {
+              fn()
+          }
       }
 
     }, page.readyDelay);
@@ -259,13 +307,22 @@
       phonon.tagManager.trigger(pageName, 'transitionend');
     }
 
-	dispatchEvent('pagetransitionend', pageName)
+	dispatchDOMEvent('pagetransitionend', pageName);
 
     var page = getPageObject(pageName);
 
     // Call the onTransitionEnd callback
     if(page.activity instanceof Activity && typeof page.activity.onTransitionEndCallback === 'function') {
       page.activity.onTransitionEndCallback();
+    }
+
+    dispatchEvent('transitionend', page.callbackRegistered)
+
+    if(typeof window.phononDOM[page.name] === 'object') {
+        var fn = window.phononDOM[page.name]['onTransitionEnd'];
+        if(typeof fn === 'function') {
+            fn()
+        }
     }
   }
 
@@ -275,13 +332,22 @@
       phonon.tagManager.trigger(pageName, 'hidden');
     }
 
-	dispatchEvent('pagehidden', pageName)
+	dispatchDOMEvent('pagehidden', pageName)
 
     var page = getPageObject(pageName);
 
     // Call the onHidden callback
     if(page.activity instanceof Activity && typeof page.activity.onHiddenCallback === 'function') {
       page.activity.onHiddenCallback();
+    }
+
+    dispatchEvent('hidden', page.callbackRegistered)
+
+    if(typeof window.phononDOM[page.name] === 'object') {
+        var fn = window.phononDOM[page.name]['onHidden'];
+        if(typeof fn === 'function') {
+            fn()
+        }
     }
   }
 
@@ -291,7 +357,7 @@
       phonon.tagManager.trigger(pageName, 'tabchanged', tabNumber);
     }
 
-	dispatchEvent('pagetabchanged', pageName)
+	dispatchDOMEvent('pagetabchanged', pageName)
 
     var page = getPageObject(pageName);
 
@@ -299,13 +365,20 @@
     if(page.activity instanceof Activity && typeof page.activity.onTabChangedCallback === 'function') {
       page.activity.onTabChangedCallback(tabNumber);
     }
+
+    dispatchEvent('tabchanged', page.callbackRegistered, tabNumber);
+
+    if(typeof window.phononDOM[page.name] === 'object') {
+        var fn = window.phononDOM[page.name]['onTabChanged'];
+        if(typeof fn === 'function') {
+            fn(tabNumber)
+        }
+    }
   }
 
   function callClose(pageName, nextPageName, hash) {
-
     function close() {
-
-	  dispatchEvent('pageclosed', pageName)
+	  dispatchDOMEvent('pageclosed', pageName)
 
       var currentHash = window.location.hash.split('#')[1];
 
@@ -336,10 +409,15 @@
     // Call the onclose callback
     if(page.activity instanceof Activity && typeof page.activity.onCloseCallback === 'function') {
       page.activity.onCloseCallback(api);
-    } else {
-      if(!riotEnabled) {
-        throw new Error('The page ' + page.name + ' prevents close, but its callback (onClose) is undefined');
-      }
+    }
+
+    dispatchEvent('close', page.callbackRegistered, api);
+
+    if(typeof window.phononDOM[page.name] === 'object') {
+        var fn = window.phononDOM[page.name]['onClose'];
+        if(typeof fn === 'function') {
+            fn(api)
+        }
     }
   }
 
@@ -351,13 +429,22 @@
       phonon.tagManager.trigger(pageName, 'hashchanged', params);
     }
 
-	dispatchEvent('pagehash', pageName, params)
+	dispatchDOMEvent('pagehash', pageName, params)
 
     var page = getPageObject(pageName);
 
     // Call the onHashChanged callback
     if(page.activity instanceof Activity && typeof page.activity.onHashChangedCallback === 'function') {
       page.activity.onHashChangedCallback(params);
+    }
+
+    dispatchEvent('hashchanged', page.callbackRegistered, params);
+
+    if(typeof window.phononDOM[page.name] === 'object') {
+        var fn = window.phononDOM[page.name]['onHashChanged'];
+        if(typeof fn === 'function') {
+            fn(params)
+        }
     }
   }
 
@@ -367,8 +454,7 @@
     }
   }
 
-  function mount(pageName, fn) {
-
+  function mount(pageName, fn, postData) {
     if(riotEnabled) {
 
       riot.compile(function() {
@@ -391,7 +477,21 @@
 
       if(page.content !== null) {
 
+        if(page.nocache === null || page.showloader === null){
+          var setLoaderAndCache = function(pageName){
+            var elPage = getPageEl(pageName);
+            page.nocache = false
+            page.showloader = false
+              if(elPage.getAttribute('data-nocache') === 'true') page.nocache = true
+              if(elPage.getAttribute('data-loader') === 'true') page.showloader = true
+          };
+          setLoaderAndCache(pageName)
+        }
+
+       if(page.showloader) document.body.classList.add('loading');
+
         loadContent(page.content, function(template) {
+          if(page.showloader) document.body.classList.remove('loading');
 
           var elPage = getPageEl(pageName);
 
@@ -415,8 +515,13 @@
 
 		  var evalJs = function(element) {
 			  var s = element.getElementsByTagName('script');
+              // convert nodeList to array
+              s = Array.prototype.slice.call(s);
 			  for(var i=0; i < s.length; i++) {
-				  DOMEval(s[i].innerHTML);
+                  var type = s[i].getAttribute('type');
+                  if(type === 'text/javascript' || type === null) {
+                    DOMEval(page.name, s[i].innerHTML);
+                  }
 			  }
 		  };
 
@@ -433,14 +538,14 @@
             fn();
           }
 
-        });
+        }, postData);
       } else {
         fn();
       }
     }
   }
 
-  function loadContent(url, fn) {
+  function loadContent(url, fn, postData) {
     var req = new XMLHttpRequest();
     if(req.overrideMimeType) req.overrideMimeType('text/html; charset=utf-8');
     req.onreadystatechange = function() {
@@ -448,20 +553,30 @@
         fn(req.responseText, opts, url);
       }
     };
-    req.open('GET', opts.templateRootDirectory + url, true);
-    req.send('');
+
+    if(typeof postData !== 'string'){
+      req.open('GET', opts.templateRootDirectory + url, true);
+      req.send('');
+    }else{
+      req.open('POST', opts.templateRootDirectory + url, true);
+      req.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+      req.send(postData);
+    }
   }
 
   function createPage(pageName, properties) {
 	properties = typeof properties === 'object' ? properties : {};
 
 	var newPage = {
-		name: pageName,
-		mounted: false,
-		async: false,
-		activity: null,
-		content: null,
-		readyDelay: 1
+      name: pageName,
+      mounted: false,
+      async: false,
+      activity: null,
+      content: null,
+      readyDelay: 1,
+      callbackRegistered: [],
+      nocache: null,
+      showloader: null
 	};
 
 	var prop;
@@ -494,12 +609,11 @@
    * @return {Boolean}
    */
   function isComponentVisible() {
-
     // close active dialogs, popovers, panels and side-panels
-    if(typeof phonon.dialog !== 'undefined' && phonon.dialog().closeActive()) return true;
-    if(typeof phonon.popover !== 'undefined' && phonon.popover().closeActive()) return true;
-    if(typeof phonon.panel !== 'undefined' && phonon.panel().closeActive()) return true;
-    if(typeof phonon.sidePanel !== 'undefined' && phonon.sidePanel().closeActive()) return true;
+    if(typeof phonon.dialog !== 'undefined' && phonon.dialogUtil.closeActive()) return true;
+    if(typeof phonon.popover !== 'undefined' && phonon.popoverUtil.closeActive()) return true;
+    if(typeof phonon.panel !== 'undefined' && phonon.panelUtil.closeActive()) return true;
+    if(typeof phonon.sidePanel !== 'undefined' && phonon.sidePanelUtil.closeActive()) return true;
 
     return false;
   }
@@ -520,14 +634,42 @@
 
       if(inddex > -1) {
         page = pageHistory[inddex];
-        pageHistory.slice(inddex, 1);
+        pageHistory = pageHistory.slice(0, inddex);
       }
     }
     return page;
   }
 
-  function navigationListener(evt) {
+  function serializeForm(evt){
+    var evt    = evt || window.event;
+    var form   = evt.target;
+    var field, query='';
+    if(typeof form == 'object' && form.nodeName == "FORM"){
+        var i;
+        for(i=form.elements.length-1; i>=0; i--){
+            field = form.elements[i];
+            if(field.name && field.type != 'file' && field.type != 'reset'){
+                if(field.type == 'select-multiple'){
+                    for(j=form.elements[i].options.length-1; j>=0; j--){
+                        if(field.options[j].selected){
+                            query += '&' + field.name + "=" + encodeURIComponent(field.options[j].value).replace(/%20/g,'+');
+                        }
+                    }
+                }
+                else{
+                    if((field.type != 'submit' && field.type != 'button') || evt.target == field){
+                        if((field.type != 'checkbox' && field.type != 'radio') || field.checked){
+                            query += '&' + field.name + "=" + encodeURIComponent(field.value).replace(/%20/g,'+');
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return query.substr(1);
+  }
 
+  function navigationListener(evt) {
     /*
      * user interactions are safed (with or without data-navigation | href)
      * the goal is to prevent the backward button if enableBrowserBackButton = false
@@ -538,6 +680,20 @@
     var nav = null;
     var validHref = false;
     var params = '';
+    var formData;
+
+    if(evt.type == 'submit'){ // dev
+      var formAction = target.getAttribute('action');
+      if(formAction.match(new RegExp('^#'+opts.hashPrefix))){
+          evt.preventDefault();
+          nav = formAction.substr(1+(opts.hashPrefix.length))
+          callClose(currentPage, nav, opts.hashPrefix+nav);
+          onBeforeTransition(nav, function() {
+              //callHash(nav);
+          }, serializeForm(evt)); // dev
+          return changePage(formAction.substr(1+(opts.hashPrefix.length)))
+      }
+    }
 
     for (; target && target !== document; target = target.parentNode) {
       var dataNav = target.getAttribute('data-navigation');
@@ -642,8 +798,7 @@
    * @param {String} pageName
    * @param {Function} callback
    */
-  function onBeforeTransition(pageName, callback) {
-
+  function onBeforeTransition(pageName, callback, postData) {
     if(onActiveTransition) {
       if(typeof callback === 'function') {
         return callback();
@@ -660,8 +815,7 @@
       currentPage = pageName;
     }
 
-    if(!page.mounted) {
-
+    if(!page.mounted || page.nocache) {
       mount(page.name, function() {
 
         page.mounted = true;
@@ -688,7 +842,7 @@
         if(typeof callback === 'function') {
           callback();
         }
-      });
+      }, postData);
     } else {
 
       callReady(pageName);
@@ -702,6 +856,7 @@
   }
 
   function init(options) {
+
     if(typeof options.templateRootDirectory === 'string' && options.templateRootDirectory !== '') {
       options.templateRootDirectory = ( (options.templateRootDirectory.indexOf('/', options.templateRootDirectory.length - '/'.length) !== -1) ? options.templateRootDirectory : options.templateRootDirectory + '/');
     }
@@ -737,7 +892,11 @@
     }
 
     // android, ios or browser
-    var osName = phonon.device.os.toLowerCase();
+    var osName = '';
+    if(phonon.device.os) {
+        osName = phonon.device.os.toLowerCase()
+    }
+
     var osClass = 'web';
 
     if(osName === 'android') {
@@ -760,7 +919,11 @@
 
     if(pageObject) {
 
-      var hash = (typeof pageParams === 'string' ? opts.hashPrefix + pageObject.name + '/' + pageParams : opts.hashPrefix + pageObject.name);
+      var hash =  opts.hashPrefix + pageObject.name
+
+      if(typeof pageParams !== 'undefined') {
+        hash = opts.hashPrefix + pageObject.name + '/' + pageParams;
+      }
 
       if(currentPageObject.async) {
         callClose(currentPage, pageObject.name, hash);
@@ -778,10 +941,8 @@
   /**
    * @param {String | HashEvent} virtualHash
    */
-  function onRoute(virtualHash) {
-
+  function onRoute(virtualHash, postData) {
     var hash = (typeof virtualHash === 'string' ? virtualHash : window.location.href.split('#')[1] || '');
-
     var pageName;
 
     var parsed = hash.split('/');
@@ -885,14 +1046,12 @@
       }
 
       if(!pageObject.mounted) {
-
         onBeforeTransition(pageObject.name, function() {
           callHash(pageObject.name, params);
-        });
+        }, postData);
 
       } else {
-
-        onBeforeTransition(pageObject.name);
+        onBeforeTransition(pageObject.name, null, postData);
         callHash(pageObject.name, params);
       }
 
@@ -904,28 +1063,33 @@
    * One listener to navigate through the app pages
    */
   document.on('tap', navigationListener);
+  /**
+   * Handle (port) forms to event
+   */
+  document.on('submit', navigationListener);
 
   /*
-   * we do not call onRoute() directly because it is used in callClose
+   * [1] we do not call onRoute() directly because it is used in callClose
    * in order to prevent the back button on navigator:
    * the hash changes, but it is refused by this module (not trusted behavior)
    * so we need to call this function with a "virtual hash" as argument
+   * [2] window.on(...) seems buggy
    */
-  if(opts.useHash) window.on('hashchange', onRoute);
+  if(opts.useHash) window.addEventListener('hashchange', onRoute);
 
   document.on('backbutton', function() {
+    if(isComponentVisible()) return;
     var last = getLastPage();
     callClose(currentPage, last.page, opts.hashPrefix + last.page + '/' + last.params);
   });
 
-
   phonon.navigator = function(options) {
-
     if(typeof options === 'object') {
       init(options);
     }
 
     return {
+
       currentPage: currentPage,
       previousPage: previousPage,
       start: start,
@@ -941,6 +1105,13 @@
         var wait = (isComponentVisible() ? 400 : 1);
 
         window.setTimeout(function() {
+          if (pageName == '$previous-page') {
+            var last = getLastPage();
+            if (last) {
+              pageName = last.page;
+              pageParams = last.params;
+            }
+          }
           changePage(pageName, pageParams);
         }, wait);
       },
@@ -954,27 +1125,45 @@
         if(typeof options.readyDelay !== 'undefined' && typeof options.readyDelay !== 'number') {
           throw new Error('readyDelay option must be a number');
         }
+        if(typeof options.content !== null && typeof opts.defaultTemplateExtension === 'string') {
+            options.content = options.page + '.' + opts.defaultTemplateExtension;
+        }
 
-		// vuejs, riotjs support
+        // vuejs, riotjs support
         var page = getPageObject(options.page);
-		var exists = page === null ? false : true;
-		if(!exists) {
-          page = createPage(options.page);
-		}
+        var exists = page === null ? false : true;
+        if(!exists) {
+            page = createPage(options.page);
+        }
 
-		if(typeof callback === 'function' || typeof callback === 'object') {
-		  page.activity = new Activity(callback);
-	  	} else {
-		  page.activity = null;
-	  	}
+        if(typeof callback === 'function' || typeof callback === 'object') {
+          page.activity = new Activity(callback);
+        } else {
+          page.activity = null;
+        }
 
-		page.callback = callback;
-		page.async = (typeof options.preventClose === 'boolean' ? options.preventClose : false);
-		page.content = (typeof options.content === 'string' ? options.content : null);
-		page.readyDelay = (typeof options.readyDelay === 'number' ? options.readyDelay : 1);
+        page.callback = callback;
+        page.async = (typeof options.preventClose === 'boolean' ? options.preventClose : false);
+        page.content = (typeof options.content === 'string' ? options.content : null);
+        page.readyDelay = (typeof options.readyDelay === 'number' ? options.readyDelay : 1);
 
-		createOrUpdatePage(options.page.toLowerCase(), page);
-	  },
+        createOrUpdatePage(options.page.toLowerCase(), page);
+      },
+      // register a page event only such as home:create
+      onPage: function (pageName) {
+          if (typeof pageName !== 'string'){
+              throw new Error('PageName must be a string');
+          }
+
+          createOrUpdatePage(pageName, {});
+
+          return {
+              addEvent: function (eventName, callback) {
+                  var page = getPageObject(pageName);
+                  page.callbackRegistered.push({event: eventName, callback: callback});
+              }
+          }
+      },
       callCallback: callCallback
     };
   };

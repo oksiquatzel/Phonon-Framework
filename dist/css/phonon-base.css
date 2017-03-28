@@ -360,18 +360,21 @@ button {
 }
 .primary.btn-flat {
   color: #0084e7 !important;
+  background-color: transparent !important;
 }
 .positive {
   background-color: #0ae700 !important;
 }
 .positive.btn-flat {
   color: #0ae700 !important;
+  background-color: transparent !important;
 }
 .negative {
   background-color: #f40b00 !important;
 }
 .negative.btn-flat {
   color: #f40b00 !important;
+  background-color: transparent !important;
 }
 .light-primary {
   background-color: #b9d3e7 !important;
@@ -381,6 +384,15 @@ button {
 }
 .light-negative {
   background-color: #f4c5c3 !important;
+}
+.dark-primary {
+  background-color: #0067b5 !important;
+}
+.dark-positive {
+  background-color: #08b500 !important;
+}
+.dark-negative {
+  background-color: #c20900 !important;
 }
 .btn {
   position: relative;
@@ -420,9 +432,7 @@ button {
   padding: 16px;
   border-radius: 50%;
   box-shadow: 0 2px 3px #8a8a8a;
-  z-index: 10;
-  right: 0;
-  bottom: 0;
+  z-index: 30;
   color: #fff;
   opacity: 0.5;
   -webkit-transform: 300ms, opacity 0.25s linear;
@@ -432,6 +442,18 @@ button {
 .floating-action.active,
 .floating-action:active {
   opacity: 1;
+}
+.floating-action.top {
+  top: 68px;
+}
+.floating-action.bottom {
+  bottom: 16px;
+}
+.floating-action.left {
+  left: 16px;
+}
+.floating-action.right {
+  right: 16px;
 }
 .buttons {
   list-style: none;

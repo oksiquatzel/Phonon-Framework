@@ -7,6 +7,8 @@ var uglify       = require('gulp-uglify');
 var postcss      = require('gulp-postcss');
 var autoprefixer = require('autoprefixer');
 
+var nodeModules = './node_modules/'
+
 gulp.task('default', ['build'])
 
 gulp.task('build', [
@@ -25,6 +27,7 @@ gulp.task('build', [
 */
 gulp.task('js-core', function() {
 	return gulp.src([
+		nodeModules + 'platform/platform.js',
 		'./src/js/core/wrap/prefix.js',
 		'./src/js/core/ready.js',
 		'./src/js/core/polyfills.js',
@@ -40,7 +43,9 @@ gulp.task('js-core', function() {
 	]).pipe(concat('phonon-core.js'))
 	.pipe(gulp.dest('./dist/js'))
 	.pipe(rename({suffix: '.min'}))
-	.pipe(uglify())
+	.pipe(uglify().on('error', function(e) {
+    	console.log(e);
+    }))
 	.pipe(gulp.dest('./dist/js'));
 });
 
@@ -54,7 +59,9 @@ gulp.task('js-all', function() {
 	]).pipe(concat('phonon.js'))
 	.pipe(gulp.dest('./dist/js'))
 	.pipe(rename({suffix: '.min'}))
-	.pipe(uglify())
+	.pipe(uglify().on('error', function(e) {
+    	console.log(e);
+    }))
 	.pipe(gulp.dest('./dist/js'));
 });
 
@@ -62,10 +69,12 @@ gulp.task('js-all', function() {
  * Build each JS component
 */
 gulp.task('js-components', function () {
-	return gulp.src('./src/js/ui/*.js')
+	return gulp.src(['./src/js/ui/*.js', nodeModules + 'awesomplete/awesomplete.js'])
 	.pipe(gulp.dest('./dist/js/components'))
 	.pipe(rename({suffix: '.min'}))
-	.pipe(uglify())
+	.pipe(uglify().on('error', function(e) {
+    	console.log(e);
+    }))
 	.pipe(gulp.dest('./dist/js/components'));
 });
 

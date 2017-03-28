@@ -35,7 +35,7 @@ input:invalid, .input-invalid
 
 input::-webkit-input-placeholder
 	padding 0
-	font-size 15px
+	font-size font-size-base
 	color #999
 
 select:focus,
@@ -72,8 +72,12 @@ label
 
 .checkbox, .radio
 	position relative
-	
-.checkbox span, .radio span
+	.text
+		border none
+
+// Use of :not for backport compatibility
+// in future, replace span:not by .togglable
+.checkbox span:not(.text), .radio span:not(.text)
 	transition all 0.3s ease-in-out
 	content ""
 	position absolute
@@ -82,10 +86,10 @@ label
 	right 0
 	width tick-size
 	height tick-size
-	border 2px solid #ddd
+	border 2px solid checkbox-border-color
 
 
-.checkbox :checked + span, .radio :checked + span
+.checkbox :checked + span:not(.text), .radio :checked + span:not(.text)
 	transform rotate(-45deg)
 	border-radius 0
 	height .65rem
@@ -117,7 +121,7 @@ label
 
 	display inline-block
 
-	font-size 15px
+	font-size font-size-base
 	color #999
 
 	-webkit-font-smoothing antialiased
